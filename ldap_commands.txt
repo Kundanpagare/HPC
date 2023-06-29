@@ -1,0 +1,172 @@
+-> make 2 vm (one is Master & other is Client)
+
+-> make the below commands run for both the vm
+-> make hostname as master & Client by 
+	#hostnamectl set-hostname master/client
+
+-> make firewall stop & disable
+	#systemctl stop firewalld
+	#systemctl disable firewalld
+	#systemctl status firewalld
+
+-> make enforcing to disabled in selinux/config file
+	#vim /etc/selinux/config    .....for permanent
+or	# setenforce 0
+	#getenforce
+
+-> make enter in hosts file  like - 192.168.67.140 master
+	#vim /etc/hosts
+
+-> restart the machine by
+	#init 6 or # exec bash
+
+
+
+
+
+-> On Master Node:-
+-> install the packages 
+	# yum install openldap-servers openldap-clients
+
+	# cat cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG
+   
+	#cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG
+   
+	#chown ldap. /var/lib/ldap/DB_CONFIG
+   
+	# systemctl start slapd
+   
+	# systemctl enable slapd
+   
+-> create newpassword as root after this command 
+	# slappasswd
+
+-> create new file with ldif extension, new password will be generate after this command, copy that password & paste in below file
+	# vim password.ldif
+	-> content in this file is-
+		dn: olcDatabase={0}config,cn=config
+		changetype: modify
+		add: olcRootPW
+		olcRootPW: paste the copied password
+    
+
+	# ldapadd -Y EXTERNAL -H ldapi:/// -f password.ldif(file_name which we created)
+  
+	# ldapadd -Y EXTERNAL -H ldapi:/// -f password.ldif
+  
+-> to check the attributes
+ 	# cat /etc/openldap/schema/cosine.ldif
+-> add the schema files 
+   	# ldapadd -Y EXTERNAL -H ldapi:/// -f  /etc/openldap/schema/cosine.ldif 
+   	# ldapadd -Y EXTERNAL -H ldapi:/// -f  /etc/openldap/schema/nis.ldif 
+  	# ldapadd -Y EXTERNAL -H ldapi:/// -f  /etc/openldap/schema/inetorgperson.ldif 
+   
+-> create the chdomain file 
+  	# vim chdomain.ldif
+-write the below content in this file vim chdomain.ldif
+------------------------------------------------------------------------------------------------------------------------------------------------
+dn: olcDatabase={1}monitor,cn=config
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to * by dn.base="gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth" read by dn.base="cn=Manager,dc=cdac,dc=in" read by * none
+
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+replace: olcSuffix
+olcSuffix: dc=cdac,dc=in
+
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+replace: olcRootDn
+olcRootDN: cn=Manager,dc=cdac,dc=in
+
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+add: olcRootPW
+olcRootPW: {SSHA}el6dnumyH8aoxoYsl8YVzimMco3JALA9 (paste the copied password here)
+
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+add: olcAccess
+olcAccess: {0}to attrs=userPassword,shadowLastChange by dn="cn=Manager,dc=cdac,dc=in" write by anonymous auth by self write by * none
+olcAccess: {1}to dn.base="" by * read
+olcAccess: {2}to * by dn="cn=Manager,dc=cdac,dc=in" write by * read
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-> modify the chdomain file by
+	# ldapmodify -Y EXTERNAL -H ldapi:// -f chdomain.ldif 
+   ---> if the above command not run then check the chdomain file & check for the content is proper or not & also check for spellings and space.
+  
+-> create basedomain file 
+	# vim basedomain.ldif
+--write the content in that
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-> add the basedomain file by below command
+ 	# ldapadd -x -D cn=Manager,dc=cdac,dc=in -W -f basedomain.ldif 
+	--> run this command & enterthe password as root
+   
+-> Create the user file 
+ 	# vim ldapuser.ldif
+-write the below content
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 	
+-> Add the user file
+	# ldapadd -x -D cn=Manager,dc=cdac,dc=in -W -f ladapuser.ldif 
+
+	# ldapadd -x -D cn=Manager,dc=cdac,dc=in -W -f ldapuser.ldif 
+   
+	# ldapsearch -x cn=user1 -b dc=cdac,dc=in
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-> On client node:-	
+
+	# yum install openldap-clients nss-pam-ldapd
+   
+	# authconfig --enableldap --enableldapauth --ldapserver=192.168.67.140 --ldapbasedn="dc=cdac,dc=in" --enablemkhomedir --update
+   
+	# systemctl start nslcd
+   
+   	# systemctl status nslcd
+   
+   	# ldapsearch -x
+
+   	# getent passwd <- check if user1 is showing or not, if not showing then edit the below as
+
+   	# vim /etc/nsswitch.conf
+		-->in this file add ldap infornt of passwd, shadow, group as -
+	passwd: files sss ldap
+ 	shadow: files sss ldap
+	group: files sss ldap
+   --> save this file start the nslcd service again, now user1 will be shown.
+
+
+-> now check using shh 
+	# ssh user1@localhost
+
+-> if the user is showing that permission denied the open the below file and add the below lines on line 8 & line 19
+	# vim /etc/pam.d/password-auth-ac
+	-> line08 - auth sufficient pam-ldap.so use_first_pass
+	-> line19 - password sufficient pam_ldap.so use_authtok
+-> and if you forget user password then the command is 
+  	# ldappasswd -s root -W -D "cn=Manager,dc=cdac,dc=in" -x "uid=user1,ou=People,dc=cdac,dc=in"
+  	  		  |
+		       password
