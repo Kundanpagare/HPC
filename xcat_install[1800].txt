@@ -1,0 +1,95 @@
+# step 1: add two network adapters
+    1. NAT
+    2. Host-Only
+
+# step 2: change the hostname
+-> hostnamectl set-hostname master
+-> exec bash
+
+# step 3: disable the firewalld & selinux
+-> systemctl stop firewalld; systemctl disable firewalld;
+-> setenforce 0;getenforce;
+-> sed -i 's/^SELINUX=.*$/SELINUX=disabled/g'
+
+# step 4: add the repositories for xcat
+-> wget -P /etc/yum.repos.d https://xcat.org/files/xcat/repos/yum/latest/xcat-core/xcat-core.repo --no-check-certificate
+-> wget -P /etc/yum.repos.d https://xcat.org/files/xcat/repos/yum/xcat-dep/rh7/x86_64/xcat-dep.repo --no-check-certificate
+
+# step 5: update the ip address in the /etc/hosts
+    ens33: NAT
+    ens36/37/38: Host-only
+-> ip a | grep ens[no]
+-> echo "[ip] master master.cdac.in" >> /etc/hosts
+
+# step 6: install the packages
+-> yum install yum-utils;
+-> yum install epel-release;
+-> yum install xCAT;
+
+# step 7: activate/enable the xCAT script
+-> source /etc/profile.d/xcat.sh
+
+# step 8: to check if xcat is installed or not
+-> tabdump site
+
+# step 9: add the interface to the xcat
+-> chdef -t site dhcpinterfaces=ens[host-only_interface_number]
+
+# step 10: check the current os image mount location
+     # if iso is not found, then click on the CD iso at the bottam right corner and click connect
+     -> lsblk
+
+# step 11: convert the disk into iso 
+    # dd command: this command convert the disk image in to a file format
+    # disk duplicator
+    -> dd if=/dev/sr0 of=/centos.iso
+
+# step 12: extract and unpack the iso file into specific location
+    # copycds - Copies Linux distributions and service levels from DVDs/ISOs to the xCAT /install directory.
+    -> copycds /centos.iso
+
+# step 13: how to check os-list images
+    -> lsdef -t osimage
+        # install-compute : statefull
+        # netboot-compute : stateless
+        # statelite-compute : statelite
+
+# step 14: how to check attribute of the osimage
+    -> lsdef -t osimage [image_name]
+
+# step 15: generate the diskless image from diskless package
+    -> genimage centos7.9-x86_64-netboot-compute
+
+# step 16: create a directory
+    -> mkdir -p /install/custom/netboot
+
+# step 17: create a defination file which will be shared across all the computenodes and master
+    -> chdef -t osimage -o centos7.9-x86_64-netboot-compute synclists="/install/custom/netboot/compute.synclist"
+
+# step 18: create the synclist file
+    -> vim /install/custom/netboot/compute.synclist
+        /etc/passwd -> /etc/passwd
+        /etc/shadow -> /etc/shadow
+        /etc/group -> /etc/group
+
+# step 19: pack the image
+    -> packimage [image]
+
+# step 20: create the nodes
+    -> mkdef -t node [node_name] groups=compute,all ip=[ip_to_be_allocated] mac=[Compute_node_mac_address] netboot=xnba
+
+# step 21: how to check if node has been created successfully or not
+    -> lsdef [node_name]
+
+# step 22: add the domain defination
+    -> chdef -t site domain=cdac.in
+
+# step 23: make the network 
+    -> makehost
+    -> makedns -n
+    -> makedhcp -n
+
+# step 24: test the node
+    -> nodeset compute osimage=[image_name]
+
+
